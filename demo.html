@@ -107,6 +107,7 @@
 
     .status-badge.listening {
       background: rgba(34, 197, 94, 0.9);
+      animation: pulse 2s infinite;
     }
 
     @keyframes pulse {
@@ -176,26 +177,6 @@
     .btn-danger {
       background: #ef4444;
       color: white;
-    }
-
-    .btn-secondary {
-      background: white;
-      color: #374151;
-      border: 2px solid #e5e7eb;
-    }
-
-    .btn-mic {
-      background: #10b981;
-      color: white;
-    }
-
-    .btn-mic.active {
-      background: #ef4444;
-      animation: pulse 2s infinite;
-    }
-
-    .btn-mic:disabled {
-      background: #9ca3af;
     }
 
     .input-field {
@@ -309,6 +290,40 @@
       margin: 12px 0;
     }
 
+    .instruction-banner {
+      padding: 16px 20px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      border-radius: 12px;
+      font-size: 16px;
+      color: white;
+      font-weight: 600;
+      text-align: center;
+      margin: 12px 0;
+      display: none;
+      animation: slideIn 0.3s ease;
+    }
+
+    .instruction-banner.speaking {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      display: block;
+    }
+
+    .instruction-banner.listening {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      display: block;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
     @media (max-width: 1200px) {
       .main-grid {
         grid-template-columns: 1fr;
@@ -320,7 +335,7 @@
   <div class="container">
     <div class="header">
       <h1>🤖 WOW Agent Demo</h1>
-      <p>Интеллектуальный AI-аватар с предотвращением перебивания</p>
+      <p>Интеллектуальный AI-аватар с автоматическим управлением диалогом</p>
     </div>
 
     <div class="main-grid">
@@ -340,15 +355,16 @@
         </div>
 
         <div class="controls">
+          <div id="instructionBanner" class="instruction-banner">
+            🎤 Микрофон готов к работе
+          </div>
+
           <div class="controls-row">
             <button id="startBtn" class="btn-primary">
               ▶️ Старт сессии
             </button>
             <button id="stopBtn" class="btn-danger" disabled>
               ⏹️ Завершить
-            </button>
-            <button id="micBtn" class="btn-mic" disabled>
-              🎤 Микрофон
             </button>
           </div>
           <div class="status-text" id="statusText">
@@ -394,9 +410,9 @@
           <div class="info-card">
             <strong>ℹ️ Как это работает</strong>
             <p>
-              Аватар автоматически отслеживает свое состояние. 
-              Микрофон блокируется, когда аватар говорит, 
-              предотвращая перебивание и улучшая качество диалога.
+              Микрофон включается автоматически при старте сессии. 
+              Когда аватар говорит — микрофон отключается, предотвращая перебивание. 
+              Когда аватар закончил — микрофон включается и вы можете ответить.
             </p>
           </div>
 
@@ -429,14 +445,14 @@
     const els = {
       startBtn: document.getElementById("startBtn"),
       stopBtn: document.getElementById("stopBtn"),
-      micBtn: document.getElementById("micBtn"),
       statusText: document.getElementById("statusText"),
       timer: document.getElementById("timer"),
       avatarStatus: document.getElementById("avatarStatus"),
       debugBox: document.getElementById("debugBox"),
       videoContainer: document.getElementById("videoContainer"),
       videoHint: document.getElementById("videoHint"),
-      nameInput: document.getElementById("nameInput")
+      nameInput: document.getElementById("nameInput"),
+      instructionBanner: document.getElementById("instructionBanner")
     };
 
     // === Утилиты ===
@@ -449,18 +465,27 @@
 
     function updateAvatarStatus(status, speaking = false) {
       const badge = els.avatarStatus;
-      const indicator = badge.querySelector('.status-indicator');
       const text = badge.querySelector('span');
       
       badge.className = 'status-badge';
+      
       if (speaking) {
         badge.classList.add('speaking');
         text.textContent = '🔴 Аватар говорит';
+        
+        // Показываем баннер "Слушайте"
+        els.instructionBanner.className = 'instruction-banner speaking';
+        els.instructionBanner.textContent = '👂 Слушайте аватара...';
       } else if (status === 'listening') {
         badge.classList.add('listening');
-        text.textContent = '🟢 Аватар слушает';
+        text.textContent = '🟢 Вы можете говорить';
+        
+        // Показываем баннер "Говорите"
+        els.instructionBanner.className = 'instruction-banner listening';
+        els.instructionBanner.textContent = '🎤 Говорите сейчас!';
       } else {
         text.textContent = status;
+        els.instructionBanner.style.display = 'none';
       }
     }
 
@@ -606,36 +631,36 @@
           
           log(`📨 Событие: ${event.type || 'unknown'}`);
 
- // Отслеживание состояния аватара
-if (event.type === 'avatar_start_talking') {  // ← ПОДЧЁРКИВАНИЕ вместо точки!
-  state.avatarSpeaking = true;
-  updateAvatarStatus('Говорит', true);
-  
-  // ✅ ФИЗИЧЕСКИ ОТКЛЮЧАЕМ МИКРОФОН
-  if (state.localMicTrack && !state.localMicTrack.isMuted) {
-    log("🔇 Микрофон MUTE (аватар говорит)");
-    try {
-      state.localMicTrack.mute();
-    } catch (e) {
-      log(`⚠️ Ошибка mute: ${e.message}`);
-    }
-  }
-}
+          // Отслеживание состояния аватара
+          if (event.type === 'avatar_start_talking') {
+            state.avatarSpeaking = true;
+            updateAvatarStatus('Говорит', true);
+            
+            // ✅ ФИЗИЧЕСКИ ОТКЛЮЧАЕМ МИКРОФОН
+            if (state.localMicTrack && !state.localMicTrack.isMuted) {
+              log("🔇 Микрофон MUTE (аватар говорит)");
+              try {
+                state.localMicTrack.mute();
+              } catch (e) {
+                log(`⚠️ Ошибка mute: ${e.message}`);
+              }
+            }
+          }
 
-if (event.type === 'avatar_stop_talking') {  // ← ПОДЧЁРКИВАНИЕ вместо точки!
-  state.avatarSpeaking = false;
-  updateAvatarStatus('Слушает', false);
-  
-  // ✅ ФИЗИЧЕСКИ ВКЛЮЧАЕМ МИКРОФОН
-  if (state.localMicTrack && state.localMicTrack.isMuted) {
-    log("🔊 Микрофон UNMUTE (аватар закончил)");
-    try {
-      state.localMicTrack.unmute();
-    } catch (e) {
-      log(`⚠️ Ошибка unmute: ${e.message}`);
-    }
-  }
-}
+          if (event.type === 'avatar_stop_talking') {
+            state.avatarSpeaking = false;
+            updateAvatarStatus('listening', false);
+            
+            // ✅ ФИЗИЧЕСКИ ВКЛЮЧАЕМ МИКРОФОН
+            if (state.localMicTrack && state.localMicTrack.isMuted) {
+              log("🔊 Микрофон UNMUTE (аватар закончил)");
+              try {
+                state.localMicTrack.unmute();
+              } catch (e) {
+                log(`⚠️ Ошибка unmute: ${e.message}`);
+              }
+            }
+          }
 
           if (event.type === 'conversation.turn_completed') {
             log("✅ Реплика завершена");
@@ -662,7 +687,6 @@ if (event.type === 'avatar_stop_talking') {  // ← ПОДЧЁРКИВАНИЕ �
         }
       }
 
-      els.micBtn.disabled = false;
       updateAvatarStatus('Подключен');
       log(`✅ Подключено к комнате: ${state.room.name}`);
     }
@@ -690,6 +714,26 @@ if (event.type === 'avatar_stop_talking') {  // ← ПОДЧЁРКИВАНИЕ �
         log("✅ Сессия запущена");
 
         await connectLiveKit(payload);
+
+        // ✅ АВТОМАТИЧЕСКИ ВКЛЮЧАЕМ МИКРОФОН
+        try {
+          log("🎤 Автоматическое включение микрофона...");
+          
+          state.localMicTrack = await window.LivekitClient.createLocalAudioTrack({
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          });
+
+          await state.room.localParticipant.publishTrack(state.localMicTrack);
+          log("✅ Микрофон автоматически включен");
+          
+          els.instructionBanner.className = 'instruction-banner listening';
+          els.instructionBanner.textContent = '🎤 Микрофон активен, вы можете говорить!';
+        } catch (e) {
+          log(`⚠️ Не удалось включить микрофон: ${e.message}`);
+          els.statusText.textContent = `⚠️ Разрешите доступ к микрофону`;
+        }
 
         els.startBtn.disabled = true;
         els.stopBtn.disabled = false;
@@ -724,8 +768,7 @@ if (event.type === 'avatar_stop_talking') {  // ← ПОДЧЁРКИВАНИЕ �
 
         els.startBtn.disabled = false;
         els.stopBtn.disabled = true;
-        els.micBtn.disabled = true;
-        els.micBtn.classList.remove('active');
+        els.instructionBanner.style.display = 'none';
         
         updateAvatarStatus('Завершено');
         els.statusText.textContent = "✅ Сессия завершена. Можете начать новую.";
@@ -733,55 +776,6 @@ if (event.type === 'avatar_stop_talking') {  // ← ПОДЧЁРКИВАНИЕ �
       } catch (e) {
         els.statusText.textContent = `❌ Ошибка: ${e.message}`;
         log(`❌ Ошибка остановки: ${e.message}`);
-      }
-    }
-
-    // === Управление микрофоном ===
-    async function toggleMicrophone() {
-      try {
-        if (!state.room) {
-          throw new Error("Сначала запустите сессию");
-        }
-
-        // Проверяем, не говорит ли аватар
-        if (state.avatarSpeaking) {
-          log("⚠️ Микрофон заблокирован: аватар говорит");
-          els.statusText.textContent = "⚠️ Дождитесь, пока аватар закончит говорить";
-          return;
-        }
-
-        if (state.localMicTrack) {
-          // Выключаем микрофон
-          try { 
-            await state.room.localParticipant.unpublishTrack(state.localMicTrack); 
-          } catch {}
-          try { 
-            state.localMicTrack.stop(); 
-          } catch {}
-          state.localMicTrack = null;
-
-          els.micBtn.classList.remove('active');
-          els.micBtn.textContent = "🎤 Микрофон";
-          log("🔇 Микрофон выключен");
-        } else {
-          // Включаем микрофон
-          log("🎤 Запрос доступа к микрофону...");
-          
-          state.localMicTrack = await window.LivekitClient.createLocalAudioTrack({
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          });
-
-          await state.room.localParticipant.publishTrack(state.localMicTrack);
-
-          els.micBtn.classList.add('active');
-          els.micBtn.textContent = "🔴 Микрофон (вкл)";
-          log("✅ Микрофон включен");
-        }
-      } catch (e) {
-        log(`❌ Ошибка микрофона: ${e.message}`);
-        els.statusText.textContent = `❌ Ошибка: ${e.message}`;
       }
     }
 
@@ -798,11 +792,11 @@ if (event.type === 'avatar_stop_talking') {  // ← ПОДЧЁРКИВАНИЕ �
     // === События кнопок ===
     els.startBtn.addEventListener('click', startSession);
     els.stopBtn.addEventListener('click', stopSession);
-    els.micBtn.addEventListener('click', toggleMicrophone);
 
     // Инициализация
     log("✨ WOW Agent Demo загружен");
     log("💡 Выберите роль и нажмите 'Старт сессии'");
+    log("🎤 Микрофон включится автоматически");
   </script>
 </body>
 </html>
