@@ -607,27 +607,28 @@
           log(`📨 Событие: ${event.type || 'unknown'}`);
 
           // Отслеживание состояния аватара
-          if (event.type === 'avatar.started_talking') {
-            state.avatarSpeaking = true;
-            updateAvatarStatus('Говорит', true);
-            
-            // Отключаем микрофон, если он был включен
-            if (state.localMicTrack && !els.micBtn.disabled) {
-              log("🔇 Микрофон автоматически отключен (аватар говорит)");
-              els.micBtn.disabled = true;
-            }
-          }
-          
-          if (event.type === 'avatar.stopped_talking') {
-            state.avatarSpeaking = false;
-            updateAvatarStatus('Слушает', false);
-            
-            // Разрешаем использование микрофона
-            if (state.localMicTrack) {
-              els.micBtn.disabled = false;
-              log("✅ Микрофон доступен");
-            }
-          }
+if (event.type === 'avatar.started_talking') {
+  state.avatarSpeaking = true;
+  updateAvatarStatus('Говорит', true);
+  
+  // ✅ БЛОКИРУЕМ КНОПКУ МИКРОФОНА
+  if (!els.micBtn.disabled) {
+    log("🔇 Микрофон заблокирован (аватар говорит)");
+    els.micBtn.disabled = true;
+  }
+}
+
+if (event.type === 'avatar.stopped_talking') {
+  state.avatarSpeaking = false;
+  updateAvatarStatus('Слушает', false);
+  
+  // ✅ РАЗБЛОКИРУЕМ КНОПКУ МИКРОФОНА
+  if (state.localMicTrack) {
+    els.micBtn.disabled = false;
+    log("✅ Микрофон разблокирован");
+  }
+}
+
 
           if (event.type === 'conversation.turn_completed') {
             log("✅ Реплика завершена");
