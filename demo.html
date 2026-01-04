@@ -606,15 +606,19 @@
           
           log(`📨 Событие: ${event.type || 'unknown'}`);
 
-          // Отслеживание состояния аватара
+  // Отслеживание состояния аватара
 if (event.type === 'avatar.started_talking') {
   state.avatarSpeaking = true;
   updateAvatarStatus('Говорит', true);
   
-  // ✅ БЛОКИРУЕМ КНОПКУ МИКРОФОНА
-  if (!els.micBtn.disabled) {
-    log("🔇 Микрофон заблокирован (аватар говорит)");
-    els.micBtn.disabled = true;
+  // ✅ ФИЗИЧЕСКИ ОТКЛЮЧАЕМ МИКРОФОН
+  if (state.localMicTrack && !state.localMicTrack.isMuted) {
+    log("🔇 Микрофон MUTE (аватар говорит)");
+    try {
+      state.localMicTrack.mute();
+    } catch (e) {
+      log(`⚠️ Ошибка mute: ${e.message}`);
+    }
   }
 }
 
@@ -622,10 +626,14 @@ if (event.type === 'avatar.stopped_talking') {
   state.avatarSpeaking = false;
   updateAvatarStatus('Слушает', false);
   
-  // ✅ РАЗБЛОКИРУЕМ КНОПКУ МИКРОФОНА
-  if (state.localMicTrack) {
-    els.micBtn.disabled = false;
-    log("✅ Микрофон разблокирован");
+  // ✅ ФИЗИЧЕСКИ ВКЛЮЧАЕМ МИКРОФОН
+  if (state.localMicTrack && state.localMicTrack.isMuted) {
+    log("🔊 Микрофон UNMUTE (аватар закончил)");
+    try {
+      state.localMicTrack.unmute();
+    } catch (e) {
+      log(`⚠️ Ошибка unmute: ${e.message}`);
+    }
   }
 }
 
