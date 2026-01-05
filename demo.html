@@ -92,7 +92,7 @@
             width: 40px; height: 40px; border-radius: 50%; cursor: pointer; font-size: 20px;
         }
 
-        /* --- ЧАТ ОКНО (Новое) --- */
+        /* --- ЧАТ ОКНО --- */
         #chatInterface {
             position: absolute; bottom: 20px; right: 20px; width: 350px;
             height: 400px; max-height: 50vh;
@@ -103,9 +103,29 @@
             z-index: 30;
             transition: transform 0.3s ease;
         }
-        /* Скрытие чата на мобильных если нужно, или сделать кнопку toggle */
         @media (max-width: 600px) {
             #chatInterface { width: calc(100% - 40px); height: 35vh; }
+        }
+
+        .chat-header-bar {
+            padding: 12px 15px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .chat-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--accent);
+        }
+        #toggleChatBtn {
+            background: none;
+            border: none;
+            color: var(--gray);
+            cursor: pointer;
+            font-size: 18px;
+            padding: 4px;
         }
 
         #chatMessages {
@@ -113,13 +133,17 @@
             display: flex; flex-direction: column; gap: 10px;
             font-size: 14px;
         }
-        /* Скроллбар */
         #chatMessages::-webkit-scrollbar { width: 6px; }
         #chatMessages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
 
         .message {
             padding: 8px 12px; border-radius: 8px; max-width: 85%;
             word-wrap: break-word; line-height: 1.4;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         .message.user {
             align-self: flex-end; background: var(--accent); color: var(--dark);
@@ -128,6 +152,15 @@
         .message.agent {
             align-self: flex-start; background: rgba(255,255,255,0.1); color: var(--white);
             border-bottom-left-radius: 2px;
+        }
+        .message.system {
+            align-self: center;
+            background: rgba(255,255,255,0.05);
+            color: var(--gray-light);
+            font-size: 12px;
+            font-style: italic;
+            max-width: 100%;
+            text-align: center;
         }
 
         #chatInputContainer {
@@ -138,9 +171,21 @@
             flex: 1; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2);
             color: white; padding: 10px; border-radius: 8px; outline: none;
         }
+        #chatInput:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
         #sendBtn {
             background: var(--accent); border: none; width: 40px; border-radius: 8px;
             cursor: pointer; font-size: 18px; color: var(--dark);
+            transition: all 0.2s;
+        }
+        #sendBtn:hover:not(:disabled) {
+            background: #00A3C0;
+        }
+        #sendBtn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         /* Уведомление по центру */
@@ -192,14 +237,18 @@
             <button id="closeBtn" title="Завершить">✕</button>
         </div>
 
-        <div id="instructionBanner">🎤 Говорите...</div>
+        <div id="instructionBanner">🎤 Говорите или пишите...</div>
 
         <div id="chatInterface">
+            <div class="chat-header-bar">
+                <span class="chat-title">💬 История диалога</span>
+                <button id="toggleChatBtn">─</button>
+            </div>
             <div id="chatMessages">
-                <div class="message agent">Привет! Я готов к общению. Вы можете говорить голосом или писать здесь.</div>
+                <div class="message system">Диалог начался. Говорите голосом или пишите текстом.</div>
             </div>
             <div id="chatInputContainer">
-                <input type="text" id="chatInput" placeholder="Сообщение..." autocomplete="off">
+                <input type="text" id="chatInput" placeholder="Введите сообщение..." autocomplete="off">
                 <button id="sendBtn">➤</button>
             </div>
         </div>
@@ -219,7 +268,9 @@
             localMicTrack: null,
             sessionId: null,
             sessionToken: null,
-            isAvatarSpeaking: false
+            isAvatarSpeaking: false,
+            isSendingMessage: false,
+            messages: [] // История для сохранения
         };
 
         const ui = {
@@ -237,7 +288,8 @@
             chatInput: document.getElementById('chatInput'),
             sendBtn: document.getElementById('sendBtn'),
             startBtn: document.getElementById('startBtn'),
-            closeBtn: document.getElementById('closeBtn')
+            closeBtn: document.getElementById('closeBtn'),
+            toggleChatBtn: document.getElementById('toggleChatBtn')
         };
 
         // === Утилиты ===
@@ -256,30 +308,53 @@
         }
 
         // === Чат Логика ===
-        function addChatMessage(text, sender = 'agent') {
+        function addChatMessage(text, sender = 'agent', silent = false) {
             const div = document.createElement('div');
             div.className = `message ${sender}`;
             div.textContent = text;
             ui.chatMessages.appendChild(div);
             ui.chatMessages.scrollTop = ui.chatMessages.scrollHeight;
+
+            // Сохраняем в историю (кроме системных)
+            if (sender !== 'system' && !silent) {
+                state.messages.push({
+                    sender: sender,
+                    text: text,
+                    timestamp: new Date().toISOString()
+                });
+            }
         }
 
         async function sendUserMessage() {
             const text = ui.chatInput.value.trim();
-            if (!text || !state.room) return;
+            if (!text || state.isSendingMessage) return;
 
+            // Показываем сообщение пользователя
             addChatMessage(text, 'user');
             ui.chatInput.value = '';
 
-            // Отправка текста в LiveKit (Data Channel)
             try {
-                const data = new TextEncoder().encode(JSON.stringify({
-                    type: "chat", // Или "user_message", зависит от бэкенда
-                    text: text
-                }));
-                await state.room.localParticipant.publishData(data, { reliable: true });
+                state.isSendingMessage = true;
+                ui.sendBtn.disabled = true;
+                ui.chatInput.disabled = true;
+
+                // ВАЖНО: Отправляем текстовое сообщение через API
+                await postJSON("/api/send-event", {
+                    session_token: state.sessionToken,
+                    event_type: "chat",
+                    data: { text: text }
+                });
+
+                console.log("✓ Сообщение отправлено аватару:", text);
+
             } catch (e) {
                 console.error("Ошибка отправки сообщения:", e);
+                addChatMessage("⚠️ Ошибка отправки сообщения", 'system');
+            } finally {
+                state.isSendingMessage = false;
+                ui.sendBtn.disabled = false;
+                ui.chatInput.disabled = false;
+                ui.chatInput.focus();
             }
         }
 
@@ -288,54 +363,97 @@
             if (state.room) await state.room.disconnect();
 
             const { Room, RoomEvent } = window.LivekitClient;
-            state.room = new Room({ adaptiveStream: true, dynacast: true });
+            state.room = new Room({ 
+                adaptiveStream: true, 
+                dynacast: true,
+                autoSubscribe: true 
+            });
 
             // 1. Медиа (Видео/Аудио)
-            state.room.on(RoomEvent.TrackSubscribed, (track) => {
+            state.room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                console.log("Track subscribed:", track.kind, "from:", participant?.identity);
+                
                 const el = track.attach();
                 if (track.kind === "video") {
                     ui.videoContainer.innerHTML = '';
                     ui.videoContainer.appendChild(el);
-                } else {
+                } else if (track.kind === "audio") {
+                    el.style.display = 'none';
                     document.body.appendChild(el);
                 }
             });
 
-            // 2. Данные (События + Чат)
-            state.room.on(RoomEvent.DataReceived, (payload) => {
+            // 2. Данные (События + Транскрипция)
+            state.room.on(RoomEvent.DataReceived, (payload, participant) => {
                 try {
                     const str = new TextDecoder().decode(payload);
                     const event = JSON.parse(str);
                     
-                    console.log("Event:", event);
+                    console.log("📨 Event received:", event);
 
-                    // Статусы
-                    if (event.type === 'avatar_start_talking') {
+                    // === СТАТУСЫ АВАТАРА ===
+                    if (event.type === 'avatar_start_talking' || event.type === 'avatar.started_talking') {
                         state.isAvatarSpeaking = true;
                         updateStatus('speaking');
-                        if (state.localMicTrack) state.localMicTrack.mute();
+                        // Отключаем микрофон пока аватар говорит
+                        if (state.localMicTrack) {
+                            state.localMicTrack.mute();
+                        }
                     }
-                    if (event.type === 'avatar_stop_talking') {
+                    
+                    if (event.type === 'avatar_stop_talking' || event.type === 'avatar.stopped_talking') {
                         state.isAvatarSpeaking = false;
                         updateStatus('listening');
-                        if (state.localMicTrack) state.localMicTrack.unmute();
+                        // Включаем микрофон обратно
+                        if (state.localMicTrack) {
+                            state.localMicTrack.unmute();
+                        }
                     }
 
-                    // Транскрипция / Чат от аватара
-                    // Проверяем разные популярные ключи для текста
-                    if (event.type === 'transcription' || event.type === 'agent_message') {
-                        if (event.text) addChatMessage(event.text, 'agent');
+                    // === ТРАНСКРИПЦИЯ ПОЛЬЗОВАТЕЛЯ (голос → текст) ===
+                    if (event.type === 'user_transcript' || event.type === 'user.transcript') {
+                        if (event.text || event.transcript) {
+                            const userText = event.text || event.transcript;
+                            addChatMessage(userText, 'user');
+                        }
                     }
-                    // Если просто пришел текст сообщения
-                    if (event.message) addChatMessage(event.message, 'agent');
 
-                } catch (e) { console.error(e); }
+                    // === ОТВЕТ АВАТАРА (текст) ===
+                    if (event.type === 'agent_response' || event.type === 'agent.response' || 
+                        event.type === 'transcription' || event.type === 'avatar_message') {
+                        if (event.text) {
+                            addChatMessage(event.text, 'agent');
+                        }
+                    }
+
+                    // === УНИВЕРСАЛЬНЫЙ ОБРАБОТЧИК (если структура другая) ===
+                    if (event.message && !event.type) {
+                        addChatMessage(event.message, 'agent');
+                    }
+
+                } catch (e) { 
+                    console.error("Error parsing event:", e); 
+                }
             });
 
-            state.room.on(RoomEvent.Disconnected, stopSession);
+            state.room.on(RoomEvent.Disconnected, (reason) => {
+                console.log("Disconnected:", reason);
+                stopSession();
+            });
+
+            state.room.on(RoomEvent.ParticipantConnected, (participant) => {
+                console.log("Participant connected:", participant.identity);
+            });
 
             await state.room.connect(payload.livekit_url, payload.livekit_client_token);
-            await state.room.startAudio();
+            
+            // Запускаем аудио (важно для браузера)
+            try {
+                await state.room.startAudio();
+                console.log("✓ Audio started");
+            } catch (e) {
+                console.warn("Audio autoplay blocked:", e);
+            }
         }
 
         function updateStatus(status) {
@@ -344,10 +462,13 @@
                 ui.statusBadge.classList.add('speaking');
                 ui.statusText.textContent = 'Аватар говорит';
                 ui.instructionBanner.classList.remove('visible');
+                // Блокируем чат пока аватар говорит
+                ui.chatInput.placeholder = 'Дождитесь ответа...';
             } else {
                 ui.statusBadge.classList.add('listening');
                 ui.statusText.textContent = 'Слушает вас';
                 ui.instructionBanner.classList.add('visible');
+                ui.chatInput.placeholder = 'Введите сообщение...';
             }
         }
 
@@ -361,26 +482,36 @@
                 const tData = await postJSON("/api/token", { language: "ru" });
                 state.sessionId = tData.session_id;
                 state.sessionToken = tData.session_token;
+                console.log("✓ Token received:", state.sessionId);
 
-                // 2. Старт
+                // 2. Старт сессии
                 const sData = await postJSON("/api/start", { session_token: state.sessionToken });
+                console.log("✓ Session started");
                 
-                // 3. Коннект
+                // 3. Подключение LiveKit
                 await connectLiveKit(sData.data || sData);
 
-                // 4. Микрофон
+                // 4. Микрофон (автоматически включаем)
                 try {
                     state.localMicTrack = await window.LivekitClient.createLocalAudioTrack({
-                        echoCancellation: true, noiseSuppression: true
+                        echoCancellation: true, 
+                        noiseSuppression: true,
+                        autoGainControl: true
                     });
                     await state.room.localParticipant.publishTrack(state.localMicTrack);
-                } catch (e) { console.warn("Mic error:", e); }
+                    console.log("✓ Microphone enabled");
+                } catch (e) { 
+                    console.warn("Mic error:", e); 
+                    addChatMessage("⚠️ Микрофон недоступен. Используйте текстовый чат.", 'system');
+                }
 
                 showScreen('chat');
                 updateStatus('listening');
+                ui.chatInput.focus();
 
             } catch (e) {
-                alert("Ошибка: " + e.message);
+                console.error("Start error:", e);
+                alert("Ошибка подключения: " + e.message);
                 showScreen('welcome');
                 ui.startBtn.disabled = false;
             }
@@ -388,14 +519,35 @@
 
         async function stopSession() {
             showScreen('thankYou');
-            if (state.room) { state.room.disconnect(); state.room = null; }
+            
+            if (state.room) { 
+                state.room.disconnect(); 
+                state.room = null; 
+            }
+            
             if (state.sessionId) {
                 await postJSON("/api/stop", { 
-                    session_id: state.sessionId, session_token: state.sessionToken 
-                }).catch(() => {});
+                    session_id: state.sessionId, 
+                    session_token: state.sessionToken 
+                }).catch((e) => console.error("Stop error:", e));
             }
+            
             ui.startBtn.disabled = false;
         }
+
+        // === Toggle Chat ===
+        let chatMinimized = false;
+        ui.toggleChatBtn.addEventListener('click', () => {
+            chatMinimized = !chatMinimized;
+            const chatInterface = document.getElementById('chatInterface');
+            if (chatMinimized) {
+                chatInterface.style.transform = 'translateY(350px)';
+                ui.toggleChatBtn.textContent = '▲';
+            } else {
+                chatInterface.style.transform = 'translateY(0)';
+                ui.toggleChatBtn.textContent = '─';
+            }
+        });
 
         // === Слушатели ===
         ui.startBtn.addEventListener('click', startSession);
@@ -404,7 +556,9 @@
         // Чат
         ui.sendBtn.addEventListener('click', sendUserMessage);
         ui.chatInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendUserMessage();
+            if (e.key === 'Enter' && !state.isSendingMessage) {
+                sendUserMessage();
+            }
         });
 
     </script>
