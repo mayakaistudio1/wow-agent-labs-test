@@ -5,6 +5,888 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WOW-Agent - AI Dialog Widget</title>
     <style>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WOW-Agent - AI Dialog Widget</title>
+    <!-- LiveKit SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.16.3/dist/livekit-client.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --accent: #00B8D4;
+            --dark: #1A1A1A;
+            --dark-lighter: #2D2D2D;
+            --white: #FFFFFF;
+            --gray: rgba(255, 255, 255, 0.7);
+            --gray-light: rgba(255, 255, 255, 0.5);
+            --border-radius: 12px;
+            --transition: all 0.3s ease;
+        }
+
+        body {
+            font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--dark);
+            color: var(--white);
+            overflow: hidden;
+        }
+
+        /* ЭКРАН 1: ПРИВЕТСТВИЕ */
+        #welcomeScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, var(--dark) 0%, var(--dark-lighter) 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 40px 20px;
+            z-index: 1000;
+        }
+
+        #welcomeScreen.hidden { display: none; }
+
+        #welcomeScreen h1 {
+            font-size: 48px;
+            font-weight: 900;
+            line-height: 1.2;
+            margin-bottom: 10px;
+        }
+
+        #welcomeScreen h1 .accent { color: var(--accent); }
+
+        #welcomeScreen p {
+            font-size: 18px;
+            color: var(--gray);
+            max-width: 500px;
+            margin-bottom: 40px;
+        }
+
+        #startBtn {
+            background: var(--accent);
+            color: var(--dark);
+            padding: 18px 50px;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: 18px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        #startBtn:hover {
+            background: #00A3C0;
+            transform: translateY(-2px);
+        }
+
+        #startBtn:disabled {
+            background: rgba(0, 184, 212, 0.5);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #welcomeScreen small {
+            display: block;
+            margin-top: 60px;
+            font-size: 12px;
+            color: var(--gray-light);
+            letter-spacing: 2px;
+        }
+
+        /* ЭКРАН 2: ЗАГРУЗКА */
+        #loadingScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, var(--dark) 0%, var(--dark-lighter) 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1001;
+        }
+
+        #loadingScreen.hidden { display: none; }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-top: 4px solid var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 30px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #loadingScreen p {
+            font-size: 18px;
+            color: var(--gray);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        /* ЭКРАН 3: ДИАЛОГ */
+        #chatScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            z-index: 1002;
+        }
+
+        #chatScreen.hidden { display: none; }
+
+        #videoContainer {
+            flex: 1;
+            position: relative;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        #avatarVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .chat-header {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+
+        #statusBadge {
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 12px 20px;
+            border-radius: var(--border-radius);
+            font-weight: 600;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #statusBadge .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #00FF00;
+            animation: pulse-dot 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        #timer {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 12px 20px;
+            border-radius: var(--border-radius);
+            color: var(--accent);
+            font-weight: 600;
+            font-family: monospace;
+        }
+
+        #closeBtn {
+            background: rgba(0, 0, 0, 0.8);
+            border: none;
+            color: var(--white);
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        #closeBtn:hover { background: rgba(255, 0, 0, 0.3); }
+
+        #instructionBanner {
+            position: absolute;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--accent);
+            color: var(--dark);
+            padding: 12px 24px;
+            border-radius: var(--border-radius);
+            font-weight: 600;
+            z-index: 10;
+        }
+
+        .chat-controls {
+            background: rgba(0, 0, 0, 0.95);
+            padding: 20px;
+            display: flex;
+            gap: 12px;
+        }
+
+        #messageInput {
+            flex: 1;
+            padding: 15px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: var(--border-radius);
+            color: var(--white);
+            font-size: 16px;
+        }
+
+        #messageInput::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        #messageInput:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        #sendBtn {
+            background: var(--accent);
+            border: none;
+            color: var(--dark);
+            width: 44px;
+            height: 44px;
+            border-radius: var(--border-radius);
+            font-size: 20px;
+            cursor: pointer;
+            font-weight: 700;
+        }
+
+        #sendBtn:disabled {
+            background: rgba(0, 184, 212, 0.5);
+            cursor: not-allowed;
+        }
+
+        /* ЭКРАН 4: СПАСИБО */
+        #thankYouScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, var(--dark) 0%, var(--dark-lighter) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow-y: auto;
+            z-index: 1003;
+            padding: 40px 20px;
+        }
+
+        #thankYouScreen.hidden { display: none; }
+
+        .thank-you-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 60px 40px;
+            max-width: 500px;
+            text-align: center;
+        }
+
+        .checkmark {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: var(--dark);
+            font-size: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 30px;
+        }
+
+        .thank-you-card h2 {
+            font-size: 32px;
+            font-weight: 900;
+            margin-bottom: 15px;
+        }
+
+        .thank-you-card > p {
+            font-size: 16px;
+            color: var(--gray);
+            margin-bottom: 30px;
+        }
+
+        .form-separator {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 30px 0;
+        }
+
+        .thank-you-card h3 {
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+
+        #leadForm {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        #leadForm input {
+            padding: 15px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: var(--border-radius);
+            color: var(--white);
+            font-size: 16px;
+        }
+
+        #leadForm input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        #leadForm input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        #submitFormBtn {
+            background: var(--accent);
+            color: var(--dark);
+            padding: 15px 30px;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            margin-bottom: 15px;
+        }
+
+        #submitFormBtn:hover { background: #00A3C0; }
+
+        #submitFormBtn:disabled {
+            background: rgba(0, 184, 212, 0.5);
+            cursor: not-allowed;
+        }
+
+        #chatAgainBtn {
+            background: transparent;
+            color: var(--accent);
+            padding: 15px 30px;
+            border: 2px solid var(--accent);
+            border-radius: var(--border-radius);
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        #chatAgainBtn:hover {
+            background: rgba(0, 184, 212, 0.1);
+        }
+
+        .form-success-message {
+            display: none;
+            background: rgba(0, 255, 100, 0.1);
+            border: 1px solid rgba(0, 255, 100, 0.3);
+            color: #00FF64;
+            padding: 15px 20px;
+            border-radius: var(--border-radius);
+            margin-bottom: 20px;
+        }
+
+        .form-success-message.show { display: block; }
+
+        .error-message {
+            background: rgba(255, 84, 89, 0.1);
+            border: 1px solid rgba(255, 84, 89, 0.3);
+            color: #FF5459;
+            padding: 15px 20px;
+            border-radius: var(--border-radius);
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .error-message.show { display: block; }
+    </style>
+</head>
+<body>
+    <!-- ЭКРАН 1: ПРИВЕТСТВИЕ -->
+    <div id="welcomeScreen">
+        <h1>ВАШ ПЕРСОНАЛЬНЫЙ<br><span class="accent">WOW-АГЕНТ</span></h1>
+        <p>Превращаем каждое посещение сайта в эффективную живую встречу.</p>
+        <button id="startBtn">🎤 Начать разговор</button>
+        <small>ONE PRODUCT. ONE MISSION. REVENUE.</small>
+    </div>
+
+    <!-- ЭКРАН 2: ЗАГРУЗКА -->
+    <div id="loadingScreen" class="hidden">
+        <div class="spinner"></div>
+        <p>Подключение к агенту...</p>
+    </div>
+
+    <!-- ЭКРАН 3: ДИАЛОГ -->
+    <div id="chatScreen" class="hidden">
+        <div id="videoContainer">
+            <video id="avatarVideo" autoplay playsinline></video>
+        </div>
+
+        <div class="chat-header">
+            <div id="statusBadge">
+                <span class="status-dot"></span>
+                <span id="statusText">Подключение...</span>
+            </div>
+            <div id="timer">00:00</div>
+            <button id="closeBtn">✕</button>
+        </div>
+
+        <div id="instructionBanner">🎤 Говорите сейчас!</div>
+
+        <div class="chat-controls">
+            <input id="messageInput" type="text" placeholder="Напишите сообщение или используйте микрофон..." disabled>
+            <button id="sendBtn" disabled>➤</button>
+        </div>
+    </div>
+
+    <!-- ЭКРАН 4: СПАСИБО -->
+    <div id="thankYouScreen" class="hidden">
+        <div class="thank-you-card">
+            <div class="checkmark">✓</div>
+            <h2>СПАСИБО ЗА ОБЩЕНИЕ!</h2>
+            <p>Надеемся, наш WOW-Агент смог ответить на ваши вопросы.</p>
+
+            <div class="form-separator"></div>
+
+            <h3>📋 ОСТАВЬТЕ ЗАЯВКУ</h3>
+            <div class="error-message" id="formError"></div>
+            <div class="form-success-message" id="successMessage">✅ Заявка отправлена!</div>
+
+            <form id="leadForm">
+                <input type="text" name="name" placeholder="Ваше имя" required>
+                <input type="tel" name="phone" placeholder="Телефон" required>
+                <input type="email" name="email" placeholder="Email" required>
+                <button type="submit" id="submitFormBtn">Отправить заявку</button>
+            </form>
+
+            <button id="chatAgainBtn">Пообщаться снова</button>
+        </div>
+    </div>
+
+    <script>
+        // КОНФИГУРАЦИЯ
+        const CONFIG = {
+            API_URL: window.location.origin,
+            AVATAR_ID: '9650a758-1085-4d49-8bf3-f347565ec229',
+            VOICE_ID: 'c23719ef-d070-42ee-9cd9-4b867c621671',
+            CONTEXT_ID: '0af664ad-8b66-4f6e-91ab-3b3245d4d72d',
+            LANGUAGE: 'ru',
+            TOKEN_ENDPOINT: '/api/token',
+            START_ENDPOINT: '/api/start',
+            STOP_ENDPOINT: '/api/stop',
+            SEND_EVENT_ENDPOINT: '/api/send-event',
+            MAX_SESSION_TIME: 900,
+        };
+
+        let sessionState = {
+            isActive: false,
+            sessionId: null,
+            sessionToken: null,
+            wsUrl: null,
+            startTime: null,
+            isListening: false,
+            mediaStream: null,
+            timerInterval: null,
+            formSubmitted: false,
+            livekitRoom: null,
+        };
+
+        const screens = {
+            welcome: document.getElementById('welcomeScreen'),
+            loading: document.getElementById('loadingScreen'),
+            chat: document.getElementById('chatScreen'),
+            thankYou: document.getElementById('thankYouScreen'),
+        };
+
+        const buttons = {
+            start: document.getElementById('startBtn'),
+            close: document.getElementById('closeBtn'),
+            send: document.getElementById('sendBtn'),
+            submitForm: document.getElementById('submitFormBtn'),
+            chatAgain: document.getElementById('chatAgainBtn'),
+        };
+
+        const inputs = { message: document.getElementById('messageInput') };
+
+        const displays = {
+            statusBadge: document.getElementById('statusBadge'),
+            statusText: document.getElementById('statusText'),
+            timer: document.getElementById('timer'),
+            instructionBanner: document.getElementById('instructionBanner'),
+            successMessage: document.getElementById('successMessage'),
+            errorMessage: document.getElementById('formError'),
+        };
+
+        const forms = { lead: document.getElementById('leadForm') };
+        const videoElement = document.getElementById('avatarVideo');
+
+        function showScreen(screenName) {
+            Object.values(screens).forEach(screen => screen.classList.add('hidden'));
+            screens[screenName].classList.remove('hidden');
+        }
+
+        function logEvent(type, message) {
+            console.log(`[${type}] ${message}`);
+        }
+
+        async function getSessionToken() {
+            try {
+                const response = await fetch(`${CONFIG.API_URL}${CONFIG.TOKEN_ENDPOINT}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ language: CONFIG.LANGUAGE })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                logEvent('TOKEN', `✅ Получен токен: ${data.session_id}`);
+
+                return {
+                    sessionId: data.session_id,
+                    sessionToken: data.session_token,
+                    wsUrl: data.ws_url || 'wss://cloud.livekit.io'
+                };
+            } catch (error) {
+                logEvent('ERROR', `Ошибка токена: ${error.message}`);
+                alert('❌ Ошибка подключения. Попробуйте ещё раз.');
+                showScreen('welcome');
+                throw error;
+            }
+        }
+
+        async function initializeLiveKit(sessionToken, wsUrl) {
+            try {
+                logEvent('LIVEKIT', 'Инициализация LiveKit...');
+
+                // Создаем Room объект
+                const room = new LiveKitClient.Room({
+                    autoSubscribe: true,
+                    publishDefaults: {
+                        codec: 'vp9'
+                    }
+                });
+
+                // Обработка видео трека аватара
+                room.on(LiveKitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                    logEvent('LIVEKIT', `Track подписан: ${track.kind}`);
+
+                    if (track.kind === 'video') {
+                        track.attach(videoElement);
+                        logEvent('LIVEKIT', '✅ Видео аватара подключено');
+                    }
+
+                    if (track.kind === 'audio') {
+                        track.attach();
+                        logEvent('LIVEKIT', '✅ Аудио подключено');
+                    }
+                });
+
+                // Обработка ошибок соединения
+                room.on(LiveKitClient.RoomEvent.ConnectionStateChanged, (state) => {
+                    logEvent('LIVEKIT', `Соединение: ${state}`);
+                    if (state === LiveKitClient.ConnectionState.Connected) {
+                        displays.statusText.textContent = 'Вы можете говорить';
+                        updateUIState(false);
+                    }
+                });
+
+                room.on(LiveKitClient.RoomEvent.Disconnected, () => {
+                    logEvent('LIVEKIT', 'Отключено от комнаты');
+                });
+
+                // Подключаемся к LiveKit
+                logEvent('LIVEKIT', `Подключение к ${wsUrl}...`);
+                await room.connect(wsUrl, sessionToken);
+                sessionState.livekitRoom = room;
+
+                logEvent('LIVEKIT', '✅ Успешно подключено к LiveKit');
+                return room;
+            } catch (error) {
+                logEvent('ERROR', `LiveKit ошибка: ${error.message}`);
+                throw error;
+            }
+        }
+
+        async function enableMicrophone() {
+            try {
+                sessionState.mediaStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+                logEvent('AUDIO', '✅ Микрофон включен');
+            } catch (error) {
+                logEvent('ERROR', `Микрофон ошибка: ${error.message}`);
+                alert('❌ Разрешите доступ к микрофону');
+                throw error;
+            }
+        }
+
+        async function startSession() {
+            try {
+                buttons.start.disabled = true;
+                buttons.start.textContent = 'Подключение...';
+
+                showScreen('loading');
+                const { sessionId, sessionToken, wsUrl } = await getSessionToken();
+
+                sessionState.sessionId = sessionId;
+                sessionState.sessionToken = sessionToken;
+                sessionState.wsUrl = wsUrl;
+
+                // Инициализируем LiveKit
+                await initializeLiveKit(sessionToken, wsUrl);
+
+                // Стартуем сессию на backend
+                const startResponse = await fetch(`${CONFIG.API_URL}${CONFIG.START_ENDPOINT}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_token: sessionToken })
+                });
+
+                if (!startResponse.ok) {
+                    throw new Error(`Start failed: ${startResponse.status}`);
+                }
+
+                logEvent('SESSION', '✅ Сессия запущена');
+
+                // Включаем микрофон
+                await enableMicrophone();
+
+                sessionState.isActive = true;
+                sessionState.startTime = Date.now();
+                showScreen('chat');
+                startTimer();
+
+                buttons.start.disabled = false;
+                buttons.start.textContent = '🎤 Начать разговор';
+            } catch (error) {
+                logEvent('ERROR', `Запуск сессии: ${error.message}`);
+                alert('❌ Не удалось подключиться к агенту.');
+                showScreen('welcome');
+                buttons.start.disabled = false;
+                buttons.start.textContent = '🎤 Начать разговор';
+            }
+        }
+
+        function startTimer() {
+            sessionState.timerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - sessionState.startTime) / 1000);
+                const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
+                const seconds = String(elapsed % 60).padStart(2, '0');
+                displays.timer.textContent = `${minutes}:${seconds}`;
+
+                if (elapsed >= CONFIG.MAX_SESSION_TIME) {
+                    stopSession();
+                }
+            }, 1000);
+        }
+
+        async function stopSession() {
+            try {
+                if (sessionState.timerInterval) {
+                    clearInterval(sessionState.timerInterval);
+                }
+
+                logEvent('SESSION', 'Остановка сессии...');
+
+                // Отключаемся от LiveKit
+                if (sessionState.livekitRoom) {
+                    await sessionState.livekitRoom.disconnect();
+                    sessionState.livekitRoom = null;
+                }
+
+                // Вызываем stop endpoint
+                await fetch(`${CONFIG.API_URL}${CONFIG.STOP_ENDPOINT}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: sessionState.sessionId,
+                        session_token: sessionState.sessionToken
+                    })
+                });
+
+                // Останавливаем микрофон
+                if (sessionState.mediaStream) {
+                    sessionState.mediaStream.getTracks().forEach(track => track.stop());
+                }
+
+                sessionState.isActive = false;
+                showScreen('thankYou');
+                resetFormState();
+
+                logEvent('SESSION', '✅ Сессия завершена');
+            } catch (error) {
+                logEvent('ERROR', `Stop session: ${error.message}`);
+            }
+        }
+
+        function updateUIState(isListening) {
+            sessionState.isListening = isListening;
+
+            if (isListening) {
+                displays.statusText.textContent = 'Слушайте аватара';
+                displays.instructionBanner.style.display = 'none';
+                inputs.message.disabled = true;
+                buttons.send.disabled = true;
+            } else {
+                displays.statusText.textContent = 'Вы можете говорить';
+                displays.instructionBanner.style.display = 'block';
+                inputs.message.disabled = false;
+                buttons.send.disabled = false;
+            }
+        }
+
+        async function sendMessage() {
+            const message = inputs.message.value.trim();
+            if (!message || !sessionState.isActive) return;
+
+            try {
+                inputs.message.value = '';
+                buttons.send.disabled = true;
+
+                logEvent('MESSAGE', `Отправка: ${message}`);
+
+                await fetch(`${CONFIG.API_URL}${CONFIG.SEND_EVENT_ENDPOINT}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_token: sessionState.sessionToken,
+                        event_type: 'user_message',
+                        data: { text: message }
+                    })
+                });
+
+                updateUIState(true);
+                logEvent('MESSAGE', '✅ Отправлено');
+            } catch (error) {
+                logEvent('ERROR', `Send message: ${error.message}`);
+                buttons.send.disabled = false;
+            }
+        }
+
+        async function submitLeadForm(e) {
+            e.preventDefault();
+
+            if (sessionState.formSubmitted) return;
+            sessionState.formSubmitted = true;
+
+            const formData = new FormData(forms.lead);
+            const data = {
+                name: formData.get('name'),
+                phone: formData.get('phone'),
+                email: formData.get('email'),
+            };
+
+            try {
+                buttons.submitForm.disabled = true;
+                buttons.submitForm.textContent = 'Отправляется...';
+                displays.errorMessage.classList.remove('show');
+
+                logEvent('FORM', `Отправка: ${JSON.stringify(data)}`);
+
+                // Здесь можно добавить реальный API вызов
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                displays.successMessage.classList.add('show');
+                forms.lead.reset();
+
+                setTimeout(() => {
+                    displays.successMessage.classList.remove('show');
+                    buttons.submitForm.disabled = false;
+                    buttons.submitForm.textContent = 'Отправить заявку';
+                }, 3000);
+
+                logEvent('FORM', '✅ Отправлена');
+            } catch (error) {
+                logEvent('ERROR', `Form submit: ${error.message}`);
+                displays.errorMessage.textContent = `❌ Ошибка: ${error.message}`;
+                displays.errorMessage.classList.add('show');
+                sessionState.formSubmitted = false;
+                buttons.submitForm.disabled = false;
+                buttons.submitForm.textContent = 'Отправить заявку';
+            }
+        }
+
+        function resetFormState() {
+            sessionState.formSubmitted = false;
+            displays.successMessage.classList.remove('show');
+            displays.errorMessage.classList.remove('show');
+            forms.lead.reset();
+            buttons.submitForm.disabled = false;
+            buttons.submitForm.textContent = 'Отправить заявку';
+        }
+
+        // Event Listeners
+        buttons.start.addEventListener('click', startSession);
+        buttons.close.addEventListener('click', stopSession);
+        buttons.send.addEventListener('click', sendMessage);
+        forms.lead.addEventListener('submit', submitLeadForm);
+        buttons.chatAgain.addEventListener('click', () => {
+            resetFormState();
+            startSession();
+        });
+
+        inputs.message.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !buttons.send.disabled) {
+                sendMessage();
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && sessionState.isActive) {
+                stopSession();
+            }
+        });
+
+        logEvent('INIT', '✅ WOW-Agent Widget инициализирован');
+    </script>
+</body>
+</html>
         * {
             margin: 0;
             padding: 0;
