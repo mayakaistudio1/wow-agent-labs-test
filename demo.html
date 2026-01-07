@@ -271,16 +271,25 @@
 
         // === Таймер ===
         function startTimer() {
-            clearInterval(state.countdown);
-            state.secondsLeft = 0;
-            
-            state.countdown = setInterval(() => {
-                state.secondsLeft++;
-                const mins = Math.floor(state.secondsLeft / 60);
-                const secs = state.secondsLeft % 60;
-                ui.timer.textContent = `${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
-            }, 1000);
+    clearInterval(state.countdown);
+    state.secondsLeft = 0;
+    
+    const MAX_DURATION = 180; // 3 минуты = 180 секунд
+    
+    state.countdown = setInterval(() => {
+        state.secondsLeft++;
+        const mins = Math.floor(state.secondsLeft / 60);
+        const secs = state.secondsLeft % 60;
+        ui.timer.textContent = `${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
+        
+        // Автозавершение по достижении лимита
+        if (state.secondsLeft >= MAX_DURATION) {
+            console.log("⏰ Время вышло, завершаем сессию");
+            stopSession();
         }
+    }, 1000);
+}
+
 
         // === LiveKit Логика (из demo.html) ===
         async function connectLiveKit(payload) {
